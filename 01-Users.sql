@@ -38,6 +38,8 @@ ALTER TABLE sf_users ALTER COLUMN FirstName VARCHAR(50) COLLATE Latin1_General_B
 ALTER TABLE sf_users ALTER COLUMN Email VARCHAR(50) COLLATE Latin1_General_BIN;
 ALTER TABLE sf_users ALTER COLUMN Username VARCHAR(50) COLLATE Latin1_General_BIN;
 ALTER TABLE sf_users ALTER COLUMN ProfileId VARCHAR(50) COLLATE Latin1_General_BIN;
+ALTER TABLE sf_users ALTER COLUMN ASLE_ExternalID_c VARCHAR(50) COLLATE Latin1_General_BIN;
+ALTER TABLE sf_users ALTER COLUMN ASLE_ExternalUsername_c VARCHAR(50) COLLATE Latin1_General_BIN;
 
 --========================================================================
 -- PART TWO: create an upsert table to add the new records and to update
