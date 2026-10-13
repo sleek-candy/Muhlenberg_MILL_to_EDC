@@ -35,7 +35,7 @@ Use SleekConversion;
 --================================================================================================
 ALTER TABLE sf_users ALTER COLUMN LastName VARCHAR(50) COLLATE Latin1_General_BIN;
 ALTER TABLE sf_users ALTER COLUMN FirstName VARCHAR(50) COLLATE Latin1_General_BIN;
-ALTER TABLE sf_users ALTER COLUMN Email VARCHAR(50) COLLATE Latin1_General_BIN;
+ALTER TABLE sf_users ALTER COLUMN Email VARCHAR(150) COLLATE Latin1_General_BIN;
 ALTER TABLE sf_users ALTER COLUMN Username VARCHAR(50) COLLATE Latin1_General_BIN;
 ALTER TABLE sf_users ALTER COLUMN ProfileId VARCHAR(50) COLLATE Latin1_General_BIN;
 ALTER TABLE sf_users ALTER COLUMN ASLE_ExternalID_c VARCHAR(50) COLLATE Latin1_General_BIN;

@@ -242,7 +242,7 @@ join	sf_recordtypes rf on rf.SObjectType = 'Account' and rf.Name = 'Foundation'
 join	sf_recordtypes ra on ra.SObjectType = 'Account' and ra.Name = 'Affiliated Organization'
 join	sf_recordtypes ro on ro.SObjectType = 'Account' and ro.Name = 'Other'
 join	sf_recordtypes re on re.sobjecttype = 'Account' and re.Name = 'Educational Institution'
-where	trim(c.coretbltyp) in ('C','F','AL');
+where	trim(c.coretbltyp) in ('C','F','AL','');
 
 
 -->> quick fix to blank name:
