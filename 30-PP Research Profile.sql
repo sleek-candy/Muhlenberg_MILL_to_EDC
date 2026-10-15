@@ -2,8 +2,8 @@
         PURPOSE: Populate the PP Research Profile object
          CLIENT: Muhlenburg
          AUTHOR: John Barone
-        CREATED: 10-14-2026
-  LAST MODIFIED: 10-14-2026
+        CREATED: 10-15-2026
+  LAST MODIFIED: 10-15-2026
 
    SCRIPT NOTES:
      This script generates one base Research Profile row per Account. Full info are in
@@ -17,12 +17,14 @@
         - demogrph
         - donor
         - finance
-        - media
         - rating
         - research_source
         - screener
 
-     customprospect: Not sure how this will migrate until data review
+     - customprospect:
+         There are 3 comment fields that have data. These will be broken up into
+         3 notes records with the type field reflecting the column that it was originally in.
+
      donor: This is supposed to be a glue table. It may not map anywhere in particular
      
    OVERALL TABLE MAPPING BREAKDOWN: (Leaving SI in place for now so I have a sense of where things go)
@@ -33,11 +35,10 @@
       
       -- SI
          - evaluation
-     - PP Occurence
-         - finance
-         - media (if relevant)
+     - PP Occurence: Record Type
+         - finance: Wealth
          - attribute
-         - customprospect(?)
+         - customprospect: Note(?)
 
        -- SI
          - notes
@@ -46,7 +47,7 @@
          - wealth_assets
 
  SCRIPT HISTORY:
-     10-14-2026: Original version
+     10-15-2026: Original version
      
 *** CONFIDENTIAL - ALL SOURCE CODE, SCRIPTS, PROGRAMS AND RELATED ARTIFACTS CONTAINED
     HEREIN IS THE PROPERTY OF SLEEK CONSULTING UNLESS OTHERWISE NOTED ***
@@ -57,22 +58,25 @@
 ---------------------------------------------------------------------------------
 
 -- Create synonyms to make my life easier
-CREATE SYNONYM mill_attribute FOR mill_attribute;
-CREATE SYNONYM mill_attribute_type FOR mill_attribute_type;
-CREATE SYNONYM mill_comment FOR mill_comment;
-CREATE SYNONYM mill_comment_type FOR mill_comment_type;
-CREATE SYNONYM mill_corebio FOR mill_corebio;
-CREATE SYNONYM mill_ FOR mill_custombio;
-CREATE SYNONYM mill_customprospect FOR mill_customprospect;
-CREATE SYNONYM mill_demogrph FOR mill_demogrph;
-CREATE SYNONYM mill_donor FOR mill_donor;
-CREATE SYNONYM mill_fieldlst FOR fieldlst;
-CREATE SYNONYM mill_finance FOR mill_finance;
-CREATE SYNONYM mill_media FOR mill_media;
-CREATE SYNONYM mill_rating FOR mill_rating;
-CREATE SYNONYM mill_research_source FOR mill_research_source;
-CREATE SYNONYM mill_screener FOR mill_screener;
-
+CREATE SYNONYM mill_attribute FOR [MuhlMillProd].dbo.attribute;
+CREATE SYNONYM mill_attribute_type FOR [MuhlMillProd].dbo.attribute_type;
+CREATE SYNONYM mill_comment FOR [MuhlMillProd].dbo.comment;
+CREATE SYNONYM mill_comment_type FOR [MuhlMillProd].dbo.comment_type;
+CREATE SYNONYM mill_corebio FOR [MuhlMillProd].dbo.corebio;
+CREATE SYNONYM mill_custombio FOR [MuhlMillProd].dbo.custombio;
+CREATE SYNONYM mill_customprospect FOR [MuhlMillProd].dbo.customprospect;
+CREATE SYNONYM mill_demogrph FOR [MuhlMillProd].dbo.demogrph;
+CREATE SYNONYM mill_donor FOR [MuhlMillProd].dbo.donor;
+CREATE SYNONYM mill_fieldlst FOR [MuhlMillProd].dbo.fieldlst;
+CREATE SYNONYM mill_finance FOR [MuhlMillProd].dbo.finance;
+CREATE SYNONYM mill_finance_lookup1 FOR [MuhlMillProd].dbo.finance_lookup1;
+CREATE SYNONYM mill_financial_types FOR [MuhlMillProd].dbo.financial_types;
+CREATE SYNONYM mill_media FOR [MuhlMillProd].dbo.media;
+CREATE SYNONYM mill_rating FOR [MuhlMillProd].dbo.rating;
+CREATE SYNONYM mill_research_source FOR[MuhlMillProd].dbo.research_source;
+CREATE SYNONYM mill_screener FOR [MuhlMillProd].dbo.screener;
+CREATE SYNONYM mill_source_types FOR [MuhlMillProd].dbo.source_types
+CREATE SYNONYM mill_table_groups FOR [MuhlMillProd].dbo.[table_groups];
 
 ---------------------------------------------------------------------------------
 -- discovery
@@ -365,51 +369,80 @@ WHEN NOT MATCHED BY TARGET THEN INSERT (
 )
 VALUES (s.scrnid, 1, s.scrncrdate, s.scrndate);
 
-SELECT *
+SELECT TOP 100 *
 FROM   dbo.pa_constit t;
 
 
 ---------------------------------------------------------------------------------
--- assemble constituents to migrate to PP Research Profile
+-- Migrate PP Research Profile object
 ---------------------------------------------------------------------------------
-drop table if exists PartyPhilanthropicRsrchPrfl;
+DROP TABLE IF EXISTS PartyPhilanthropicRsrchPrfl_load;
+DROP TABLE IF EXISTS dbo.pa_ignore_constits;
 
 CREATE TABLE PartyPhilanthropicRsrchPrfl_load (
-  Id                   CHAR(18)        NULL
-, Error                VARCHAR(4000)   NULL
-, ASLE_External_Id__c  VARCHAR(50)     NOT NULL  PRIMARY KEY
-, AccountId            CHAR(18)        NULL
-, CreatedDate          VARCHAR(30)     NULL
-, LastModifiedDate     VARCHAR(30)     NULL
-, acct_xid             VARCHAR(50)     NULL
+    Id                   CHAR(18)       NULL
+  , Error                VARCHAR(4000)  NULL
+  , ASLE_External_Id__c  VARCHAR(50)    NOT NULL PRIMARY KEY
+  , AccountId            CHAR(18)       NULL
+  , CreatedDate          VARCHAR(30)    NULL
+  , LastModifiedDate     VARCHAR(30)    NULL
+  , acct_xid             VARCHAR(50)    NULL
+  , namefirst            VARCHAR(50)    NULL
+  , namelast             VARCHAR(100)   NULL
 );
+GO
 
-INSERT INTO PartyPhilanthropicRsrchPrfl_load (
-  ASLE_External_Id__c, AccountId, CreatedDate, LastModifiedDate, acct_xid
-)
--- 52591
--- 52155
-SELECT 'rp_' + t.coreid AS ASLE_External_Id__c
-     --, a.Id AS AccountId
-     , t.date_added AS CreatedDate
-     , t.date_modified AS LastModifiedDate
-     , t.coreid AS acct_xid
-     , n.namefirst
-     , n.namelast
+-- Note constituents excluded from the PA load
+SELECT 'rp_' + t.coreid  AS ASLE_External_Id__c
+     , t.date_added      AS CreatedDate
+     , t.date_modified   AS LastModifiedDate
+     , t.coreid          AS acct_xid
+     , n.namefirst       AS namefirst
+     , n.namelast        AS namelast
+INTO   dbo.pa_ignore_constits
 FROM   dbo.pa_constit t
-left JOIN   sf_accounts a
+LEFT JOIN sf_accounts a
   ON   a.ASLE_External_ID_c = t.coreid
-left join MuhlMillProd.dbo.name n
-  ON  n.nameid = t.coreid
-  and n.nametype = 'a'
-WHERE a.Id is null
+LEFT JOIN MuhlMillProd.dbo.name n
+  ON   n.nameid = t.coreid
+ AND   n.nametype = 'a'
+WHERE  a.Id IS NULL;
 
+-- Populate load table
+-- 52,155
+INSERT INTO PartyPhilanthropicRsrchPrfl_load (
+  ASLE_External_Id__c, AccountId, CreatedDate, LastModifiedDate, acct_xid, namefirst, namelast
+)
+SELECT DISTINCT 'rp_' + t.coreid AS ASLE_External_Id__c
+     , a.Id                    AS AccountId
+     , t.date_added            AS CreatedDate
+     , t.date_modified         AS LastModifiedDate
+     , t.coreid                AS acct_xid
+     , n.namefirst             AS namefirst
+     , n.namelast              AS namelast
+FROM   dbo.pa_constit t
+JOIN   sf_accounts a
+  ON   a.ASLE_External_ID_c = t.coreid
+JOIN   MuhlMillProd.dbo.name n
+  ON   n.nameid = t.coreid
+ AND   n.nametype = 'a';
 
+/*****
+Upload using Python utility
+Command: sfobjectload PartyPhilanthropicRsrchPrfl PartyPhilanthropicRsrchPrfl_load externalIdField=ASLE_External_Id__c srcLogField=Error
+*****/
 
+-- Write Mock IDs so that I can code preliminary versions of other PA object loads 
+WITH mock_ids AS (
+  SELECT ASLE_External_Id__c
+       , ROW_NUMBER() OVER (order by ASLE_External_Id__c) AS Id
+  FROM   PartyPhilanthropicRsrchPrfl_load
+)
+UPDATE t
+SET    Id = 'MOCK-' + CAST(i.Id AS VARCHAR)
+     , Error = 'Mock successful'
+FROM   PartyPhilanthropicRsrchPrfl_load t
+JOIN   mock_ids i
+  ON   i.ASLE_External_Id__c = t.ASLE_External_Id__c;
 
-
-select count(*) FROM account_person_load
-
-
-select * FROM [MuhlMillProd].dbo.name where nameid = '0000170109'
-
+SELECT TOP 10 * FROM PartyPhilanthropicRsrchPrfl_load
