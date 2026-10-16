@@ -12,7 +12,6 @@
    Mill NOTES:
      - Additional info in discovery section
      - Pull info from the following tables
-        - attribute  (group = 'pt')
         - customprospect
         - demogrph
         - donor
@@ -35,16 +34,10 @@
       
       -- SI
          - evaluation
+
      - PP Occurence: Record Type
          - finance: Wealth
-         - attribute
-         - customprospect: Note(?)
-
-       -- SI
-         - notes
-         - other philanthropic_affinity
-         - philanthropic_interest
-         - wealth_assets
+         - customprospect: Philanthropic Notes
 
  SCRIPT HISTORY:
      10-15-2026: Original version
@@ -71,12 +64,16 @@ CREATE SYNONYM mill_fieldlst FOR [MuhlMillProd].dbo.fieldlst;
 CREATE SYNONYM mill_finance FOR [MuhlMillProd].dbo.finance;
 CREATE SYNONYM mill_finance_lookup1 FOR [MuhlMillProd].dbo.finance_lookup1;
 CREATE SYNONYM mill_financial_types FOR [MuhlMillProd].dbo.financial_types;
+CREATE SYNONYM mill_customprospect_lookup1 FOR [MuhlMillProd].dbo.customprospect_lookup1
+CREATE SYNONYM mill_customprospect_lookup2 FOR [MuhlMillProd].dbo.customprospect_lookup2
+CREATE SYNONYM mill_customprospect_lookup3 FOR [MuhlMillProd].dbo.customprospect_lookup3
 CREATE SYNONYM mill_media FOR [MuhlMillProd].dbo.media;
 CREATE SYNONYM mill_rating FOR [MuhlMillProd].dbo.rating;
 CREATE SYNONYM mill_research_source FOR[MuhlMillProd].dbo.research_source;
 CREATE SYNONYM mill_screener FOR [MuhlMillProd].dbo.screener;
 CREATE SYNONYM mill_source_types FOR [MuhlMillProd].dbo.source_types
 CREATE SYNONYM mill_table_groups FOR [MuhlMillProd].dbo.[table_groups];
+
 
 ---------------------------------------------------------------------------------
 -- discovery
@@ -446,3 +443,10 @@ JOIN   mock_ids i
   ON   i.ASLE_External_Id__c = t.ASLE_External_Id__c;
 
 SELECT TOP 10 * FROM PartyPhilanthropicRsrchPrfl_load
+
+
+
+-- Clear mock
+UPDATE PartyPhilanthropicRsrchPrfl_load
+SET Id = NULL, Error = NULL
+WHERE COALESCE(Id, Error) IS NOT NULL;
