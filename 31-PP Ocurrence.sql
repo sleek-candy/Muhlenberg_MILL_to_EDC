@@ -18,19 +18,6 @@
     HEREIN IS THE PROPERTY OF SLEEK CONSULTING UNLESS OTHERWISE NOTED ***
 ****************************************************************************************/
 
-/*
-     - PP Occurence
-         - finance
-         - customprospect
-         - attribute
-
-       -- SI
-         - notes
-         - other philanthropic_affinity
-         - philanthropic_interest
-         - wealth_assets
-*/
-
 /* 
 METADATA CHANGES
   CUSTOM FIELDS
@@ -171,7 +158,7 @@ SELECT CAST(NULL AS NCHAR(18))                                AS Id
      , t.cprsdate                                             AS LastModifiedDate
      , 'customprospect table'                                 AS ASLE_Millennium_Source__c
      , t.cprsid                                               AS coreid
---INTO   PartyPhilanthropicOccurrence_load_customprospect
+INTO   PartyPhilanthropicOccurrence_load_customprospect
 FROM   mill_customprospect t
 JOIN   PartyPhilanthropicRsrchPrfl_load rp
   ON   rp.acct_xid = t.cprsid COLLATE Latin1_General_BIN
@@ -359,7 +346,7 @@ LEFT JOIN sf_accounts a
 WHERE  LEN(ISNULL(TRIM(t.cprscomm), '')) = 0
   AND  LEN(ISNULL(TRIM(t.cprstext1), '')) = 0
   AND  LEN(ISNULL(TRIM(t.cprstext2), '')) = 0
-  AND  LEN(ISNULL(TRIM(t.cprstext3), '')) = 0
+  AND  LEN(ISNULL(TRIM(t.cprstext3), '')) = 0;
 
 -- Pull out records without an account for further review
 BEGIN TRANSACTION;
@@ -378,24 +365,16 @@ COMMIT TRANSACTION;
 ALTER TABLE PartyPhilanthropicOccurrence_load_customprospect ALTER COLUMN ASLE_External_Id__c VARCHAR(50) NOT NULL;
 GO
 
-ALTER TABLE PartyPhilanthropicOccurrence_load_finance
+ALTER TABLE PartyPhilanthropicOccurrence_load_customprospect
 ADD CONSTRAINT pk_PartyPhilanthropicOccurrence_load_customprospect PRIMARY KEY(ASLE_External_Id__c);
 GO
 
 /*****
 Upload using Python utility
-Command: sfobjectload PartyPhilanthropicOccurrence PartyPhilanthropicOccurrence_load_finance externalIdField=ASLE_External_Id__c srcLogField=Error
+Command: sfobjectload PartyPhilanthropicOccurrence PartyPhilanthropicOccurrence_load_customprospect externalIdField=ASLE_External_Id__c srcLogField=Error
 *****/
 
 SELECT *
-FROM   PartyPhilanthropicOccurrence_load_finance
+FROM   PartyPhilanthropicOccurrence_load_customprospect
 WHERE  Id IS NULL
-ORDER BY Error
-
-
----------------------------------------------------------------------------------
--- Millennium attribute (prospect-related)
----------------------------------------------------------------------------------
-
-
-
+ORDER BY Error;

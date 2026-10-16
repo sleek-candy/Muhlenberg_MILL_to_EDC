@@ -27,9 +27,8 @@
      donor: This is supposed to be a glue table. It may not map anywhere in particular
      
    OVERALL TABLE MAPPING BREAKDOWN: (Leaving SI in place for now so I have a sense of where things go)
-     - PP Assessment
-         - demogrph
-         - rating?
+     - Donor: Research Profile (add additional info as custom fields)
+
          - screenr
       
       -- SI
@@ -39,12 +38,17 @@
          - finance: Wealth
          - customprospect: Philanthropic Notes
 
+     - PP Assessment (no record types in object)
+         - demograph
+         - rating
+
  SCRIPT HISTORY:
      10-15-2026: Original version
      
 *** CONFIDENTIAL - ALL SOURCE CODE, SCRIPTS, PROGRAMS AND RELATED ARTIFACTS CONTAINED
     HEREIN IS THE PROPERTY OF SLEEK CONSULTING UNLESS OTHERWISE NOTED ***
 ****************************************************************************************/
+
 
 ---------------------------------------------------------------------------------
 -- prelim
@@ -53,13 +57,20 @@
 -- Create synonyms to make my life easier
 CREATE SYNONYM mill_attribute FOR [MuhlMillProd].dbo.attribute;
 CREATE SYNONYM mill_attribute_type FOR [MuhlMillProd].dbo.attribute_type;
+CREATE SYNONYM mill_campaigns FOR MuhlMillProd.dbo.campaigns;
 CREATE SYNONYM mill_comment FOR [MuhlMillProd].dbo.comment;
 CREATE SYNONYM mill_comment_type FOR [MuhlMillProd].dbo.comment_type;
 CREATE SYNONYM mill_corebio FOR [MuhlMillProd].dbo.corebio;
+CREATE SYNONYM mill_cultivation FOR [MuhlMillProd].dbo.cultivation;
 CREATE SYNONYM mill_custombio FOR [MuhlMillProd].dbo.custombio;
 CREATE SYNONYM mill_customprospect FOR [MuhlMillProd].dbo.customprospect;
-CREATE SYNONYM mill_demogrph FOR [MuhlMillProd].dbo.demogrph;
+CREATE SYNONYM mill_demogrph FOR [MuhlMillProd].dbo.demogrph
+CREATE SYNONYM mill_demographic_type FOR [MuhlMillProd].dbo.demographic_type
 CREATE SYNONYM mill_donor FOR [MuhlMillProd].dbo.donor;
+CREATE SYNONYM mill_donor_lookup1 FOR [MuhlMillProd].dbo.donor_lookup1;
+CREATE SYNONYM mill_donor_lookup2 FOR [MuhlMillProd].dbo.donor_lookup2;
+CREATE SYNONYM mill_donor_lookup3 FOR [MuhlMillProd].dbo.donor_lookup3;
+CREATE SYNONYM mill_donor_rating FOR [MuhlMillProd].dbo.donor_rating;
 CREATE SYNONYM mill_fieldlst FOR [MuhlMillProd].dbo.fieldlst;
 CREATE SYNONYM mill_finance FOR [MuhlMillProd].dbo.finance;
 CREATE SYNONYM mill_finance_lookup1 FOR [MuhlMillProd].dbo.finance_lookup1;
@@ -69,6 +80,10 @@ CREATE SYNONYM mill_customprospect_lookup2 FOR [MuhlMillProd].dbo.customprospect
 CREATE SYNONYM mill_customprospect_lookup3 FOR [MuhlMillProd].dbo.customprospect_lookup3
 CREATE SYNONYM mill_media FOR [MuhlMillProd].dbo.media;
 CREATE SYNONYM mill_rating FOR [MuhlMillProd].dbo.rating;
+CREATE SYNONYM mill_rating_companies FOR [MuhlMillProd].dbo.rating_companies;
+CREATE SYNONYM mill_rating_lookup1 FOR [MuhlMillProd].dbo.rating_lookup1;
+CREATE SYNONYM mill_rating_lookup2 FOR [MuhlMillProd].dbo.rating_lookup2;
+CREATE SYNONYM mill_rating_status FOR MuhlMillProd.dbo.rating_status
 CREATE SYNONYM mill_research_source FOR[MuhlMillProd].dbo.research_source;
 CREATE SYNONYM mill_screener FOR [MuhlMillProd].dbo.screener;
 CREATE SYNONYM mill_source_types FOR [MuhlMillProd].dbo.source_types
@@ -78,7 +93,7 @@ CREATE SYNONYM mill_table_groups FOR [MuhlMillProd].dbo.[table_groups];
 ---------------------------------------------------------------------------------
 -- discovery
 ---------------------------------------------------------------------------------
--- Main PA tables (media is a maybe)
+-- Main PA tables (media and research source are maybes)
 DECLARE @paDiscovery AS TABLE (
     tblName     SYSNAME  NOT NULL PRIMARY KEY
   , ct_all      INT      NULL
@@ -376,19 +391,6 @@ FROM   dbo.pa_constit t;
 DROP TABLE IF EXISTS PartyPhilanthropicRsrchPrfl_load;
 DROP TABLE IF EXISTS dbo.pa_ignore_constits;
 
-CREATE TABLE PartyPhilanthropicRsrchPrfl_load (
-    Id                   CHAR(18)       NULL
-  , Error                VARCHAR(4000)  NULL
-  , ASLE_External_Id__c  VARCHAR(50)    NOT NULL PRIMARY KEY
-  , AccountId            CHAR(18)       NULL
-  , CreatedDate          VARCHAR(30)    NULL
-  , LastModifiedDate     VARCHAR(30)    NULL
-  , acct_xid             VARCHAR(50)    NULL
-  , namefirst            VARCHAR(50)    NULL
-  , namelast             VARCHAR(100)   NULL
-);
-GO
-
 -- Note constituents excluded from the PA load
 SELECT 'rp_' + t.coreid  AS ASLE_External_Id__c
      , t.date_added      AS CreatedDate
@@ -407,22 +409,52 @@ WHERE  a.Id IS NULL;
 
 -- Populate load table
 -- 52,155
-INSERT INTO PartyPhilanthropicRsrchPrfl_load (
-  ASLE_External_Id__c, AccountId, CreatedDate, LastModifiedDate, acct_xid, namefirst, namelast
-)
-SELECT DISTINCT 'rp_' + t.coreid AS ASLE_External_Id__c
+
+/*
+Donor date 1: Custom Date 1
+Donor lookup 1: ResearchProfileType
+Donor Lookkup 2: ResearchProfilePhase
+Donor Lookup 3: Low/High (custom field)
+*/
+
+SELECT DISTINCT
+       CAST(NULL AS NCHAR(18)) AS Id
+     , CAST(NULL AS VARCHAR(4000)) AS Error
+     ,  'rp_' + t.coreid AS ASLE_External_Id__c
      , a.Id                    AS AccountId
-     , t.date_added            AS CreatedDate
-     , t.date_modified         AS LastModifiedDate
+     , TRIM(l1.table_val)      AS ResearchProfileType
+     , TRIM(l2.table_val)      AS ResearchProfilePhase
+     , TRIM(l3.table_val)      AS ASLE_Low_High__c
+     , d.donrdate1             AS ASLE_Custom_Date_1__c
+     , COALESCE(d.donrcrdate, t.date_added)  AS CreatedDate
+     , COALESCE(d.donrdate, t.date_modified) AS LastModifiedDate
      , t.coreid                AS acct_xid
      , n.namefirst             AS namefirst
      , n.namelast              AS namelast
+INTO   PartyPhilanthropicRsrchPrfl_load
 FROM   dbo.pa_constit t
 JOIN   sf_accounts a
   ON   a.ASLE_External_ID_c = t.coreid
 JOIN   MuhlMillProd.dbo.name n
   ON   n.nameid = t.coreid
- AND   n.nametype = 'a';
+ AND   n.nametype = 'a'
+LEFT JOIN mill_donor d
+  ON   d.donrid = t.coreid
+LEFT JOIN mill_donor_lookup1 l1
+  ON   l1.table_code = d.donrlook1
+LEFT JOIN mill_donor_lookup2 l2
+  ON   l2.table_code = d.donrlook2
+LEFT JOIN mill_donor_lookup2 l3
+  ON   l3.table_code = d.donrlook3;
+GO
+
+-- set up primary key
+ALTER TABLE PartyPhilanthropicRsrchPrfl_load ALTER COLUMN ASLE_External_Id__c VARCHAR(50)  NOT NULL;
+GO
+
+ALTER TABLE PartyPhilanthropicRsrchPrfl_load ADD CONSTRAINT pk_PartyPhilanthropicRsrchPrfl_load PRIMARY KEY(ASLE_External_Id__c)
+GO
+
 
 /*****
 Upload using Python utility
@@ -442,11 +474,14 @@ FROM   PartyPhilanthropicRsrchPrfl_load t
 JOIN   mock_ids i
   ON   i.ASLE_External_Id__c = t.ASLE_External_Id__c;
 
-SELECT TOP 10 * FROM PartyPhilanthropicRsrchPrfl_load
-
-
 
 -- Clear mock
 UPDATE PartyPhilanthropicRsrchPrfl_load
 SET Id = NULL, Error = NULL
 WHERE COALESCE(Id, Error) IS NOT NULL;
+
+
+-- If using DL, use the following script to get the fields without Id or Error
+select ASLE_External_Id__c, AccountId, ResearchProfileType, ResearchProfilePhase
+     , ASLE_Low_High__c, ASLE_Custom_Date_1__c, CreatedDate, LastModifiedDate
+FROM   PartyPhilanthropicRsrchPrfl_load
