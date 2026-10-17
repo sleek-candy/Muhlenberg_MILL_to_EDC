@@ -56,6 +56,8 @@ group by x.xid,x.giftkey,x.giftallkey,x.giftmtchky,x.giftcrdkey,x.giftjntkey,x.g
 select	* from mu_pledge_list where plg_xid=365823;
 select * from mu_pledge_list where plg_giftjntkey<5000;
 
+
+
 --================================================================================================
 -- PART TWO: build GiftCommitment load table
 --================================================================================================
@@ -104,42 +106,286 @@ select * from GiftCommitment_load where ASLE_External_ID__c=365823;
 select	* from GiftCommitment_load;
 
 --================================================================================================
--- PART THREE: build Gift Schedules
+-- PART THREE: CREATE gift commitment schedules for open pledges
 --================================================================================================
+
 -----------------------------------------------------
--->> create localized payments table
--->> that references the original pledge record
+-->> create localized payments mapping table
 -----------------------------------------------------
+--> payments list
 drop table if exists mu_payment_list;
-select	p.plg_xid, giftallkey as pmt_xid, 
-		giftkey as pmt_giftkey, giftallkey as pmt_giftallkey, 
-		giftplgkey as pmt_giftplgkey, giftjntkey as pmt_giftjntkey,
-		giftmtchky as pmt_giftmtchky, giftcrdkey as pmt_giftcrdkey, 
-		giftsumkey as pmt_giftsumkey, giftlnkkey as pmt_giftlnkkey,
-		gifthnrkey as pmt_gifthrnkey, gifthnrmkr as pmt_gifthnrmkr,
-		giftamount as pmt_giftamount, abs(giftjntamt) as pmt_giftjntamt, 
-		gifttotal as pmt_gifttotal, gifttpledg as pmt_gifttpledg,
-		giftid as pmt_giftid, giftprocdt as pmt_giftprocdt,
-		gifteffdat as pmt_gifteffdat, gifttender as pmt_gifttender,
-		gifttype as pmt_gifttype, giftcamp as pmt_giftcamp, giftrest as pmt_giftrest
+select	row_number() over (partition by plg_xid order by pmt_gifttype desc,pmt_gifteffdat,pmt_xid) as pmt_seq, x.*
 into	mu_payment_list
-from	MuhlMillProd..gifts g
-join	mu_pledge_list p on p.plg_giftkey=g.giftplgkey
-where	g.giftplgkey>5000
-and		g.gifttype in ('y','b','w')
-and		giftjntkey in (1,0)
-union
-select	p.plg_xid, o.giftallkey as pmt_xid, 
-		g.giftkey, g.giftallkey, g.giftplgkey, g.giftjntkey,
-		g.giftmtchky, g.giftcrdkey, g.giftsumkey, g.giftlnkkey,g.gifthnrkey, g.gifthnrmkr,
-		g.giftamount, abs(g.giftjntamt), g.gifttotal, g.gifttpledg,
-		g.giftid, g.giftprocdt,g.gifteffdat, g.gifttender,
-		g.gifttype, g.giftcamp,g.giftrest
-from	MuhlMillProd..gifts g
-join	MuhlMillProd..gifts o on g.giftjntkey=o.giftkey
-join	mu_pledge_list p on p.plg_giftkey=g.giftplgkey
-where	g.giftplgkey>5000
-and		g.gifttype in ('y','b','w')
-and		g.giftjntkey >5000;
+from (	select	p.plg_xid, giftallkey as pmt_xid, 
+				giftkey as pmt_giftkey, giftallkey as pmt_giftallkey, 
+				giftplgkey as pmt_giftplgkey, giftjntkey as pmt_giftjntkey,
+				giftmtchky as pmt_giftmtchky, giftcrdkey as pmt_giftcrdkey, 
+				giftsumkey as pmt_giftsumkey, giftlnkkey as pmt_giftlnkkey,
+				gifthnrkey as pmt_gifthrnkey, gifthnrmkr as pmt_gifthnrmkr,
+				giftamount as pmt_giftamount, 
+				case when g.gifttype='w' then abs(giftjntamt) else 0 end as pmt_giftwriteoff, 
+				gifttotal as pmt_gifttotal, gifttpledg as pmt_gifttpledg,
+				giftid as pmt_giftid, giftprocdt as pmt_giftprocdt,
+				giftcrdate as pmt_giftcreatedate, giftdate as pmt_giftmodifydate,
+				gifteffdat as pmt_gifteffdat, gifttender as pmt_gifttender,
+				gifttype as pmt_gifttype, giftcamp as pmt_giftcamp, giftrest as pmt_giftrest
+		from	MuhlMillProd..gifts g
+		join	mu_pledge_list p on p.plg_giftkey=g.giftplgkey
+		where	g.giftplgkey>5000
+		and		g.gifttype in ('y','b','w')
+		and		giftjntkey in (1,0)
+		union
+		select	p.plg_xid, o.giftallkey as pmt_xid, 
+				g.giftkey, g.giftallkey, g.giftplgkey, g.giftjntkey,
+				g.giftmtchky, g.giftcrdkey, g.giftsumkey, g.giftlnkkey,g.gifthnrkey, g.gifthnrmkr,
+				g.giftamount, case when g.gifttype='w' then abs(g.giftjntamt) else 0 end as pmt_giftwriteoff,  
+				g.gifttotal, g.gifttpledg, g.giftid, g.giftprocdt,g.gifteffdat, 
+				g.giftcrdate, g.giftdate, g.gifttender, g.gifttype, g.giftcamp,g.giftrest
+		from	MuhlMillProd..gifts g
+		join	MuhlMillProd..gifts o on g.giftjntkey=o.giftkey
+		join	mu_pledge_list p on p.plg_giftkey=g.giftplgkey
+		where	g.giftplgkey>5000
+		and		g.gifttype in ('y','b','w')
+		and		g.giftjntkey >5000
+	)x;
+
+-->> installments list
+drop table if exists mu_installment_list
+select	p.plg_xid, i.paykey as inst_xid, 
+		i.payduedate as inst_duedate, i.paydueamt as inst_dueamt, 
+		i.paybalamt as inst_balance,
+		row_number() over (partition by p.plg_xid order by payduedate,paydate) as inst_seq,
+		i.paycrdate as inst_createdate, i.paydate as inst_modifydate
+into	mu_installment_list
+from	mu_pledge_list p
+left	join MuhlMillProd..payments i on p.plg_giftkey=i.paylinkkey;
+
+------------------------------------------------------------------------------------------------------------
+-->> FOR ACTIVE PLEDGES, WE NEED TO CALCULATE THE INSTALLMENT LIST
+------------------------------------------------------------------------------------------------------------
+-->> create the installment container
+drop table if exists mu_pledge_installment_payments;
+create table mu_pledge_installment_payments (
+	plg_xid		varchar(10),
+	inst_xid	varchar(10),
+	pmt_xid		varchar(10),
+	inst_date	date,
+	inst_amt	money
+);
+
+-->> routine to iterate through open pledges and apply either an installment or a payment,
+-->> track the balance, and modify installments when payments don't match
+declare @pxid varchar(10), @pamt money, @ppmt money, @pbal money, @pseq int
+
+declare plist cursor for
+select	plg_xid, sum(plg_amount) as pledge_amount,
+		sum(plg_payments) as pledge_payments,
+		sum(plg_balance) as pledge_balance
+from	mu_pledge_list 
+group by plg_xid 
+having sum(plg_balance)>0;
+
+open plist
+fetch next from plist into @pxid, @pamt, @ppmt, @pbal
+while @@FETCH_STATUS=0
+	BEGIN	
+		-->> first, add the payments to the installment group and attach the pmt# and due date
+		insert into mu_pledge_installment_payments
+		select	plg_xid, null, pmt_xid, case when pmt_duedate1<pmt_duedate2 then pmt_duedate1 else pmt_duedate2 end, pmt_giftamount 
+		from (	select	p.plg_xid, p.pmt_xid, p.pmt_giftamount,
+						isnull((select min(inst_duedate) from mu_installment_list x where x.inst_duedate>=p.pmt_gifteffdat and x.plg_xid=p.plg_xid),p.pmt_gifteffdat) as pmt_duedate1,
+						isnull((select max(inst_duedate) from mu_installment_list x where x.inst_duedate<p.pmt_gifteffdat and x.plg_xid=p.plg_xid),p.pmt_gifteffdat) as pmt_duedate2
+				from	(select plg_xid, pmt_xid, sum(pmt_giftamount) as pmt_giftamount, min(pmt_gifteffdat) as pmt_gifteffdat 
+						 from mu_payment_list where pmt_gifttype<>'w' and plg_xid=@pxid group by plg_xid,pmt_xid) p
+			 )z
+		order by 4;
+
+		-->> insert outstandanding installments for the remainder of the pledge
+		insert into mu_pledge_installment_payments 
+		select	i.plg_xid, i.inst_xid, null, i.inst_duedate, i.inst_balance
+		from	mu_installment_list i
+		where	i.plg_xid=@pxid
+		and		i.inst_balance<>0;
+
+	fetch next from plist into @pxid, @pamt, @ppmt, @pbal
+	END
+close plist
+deallocate plist;
+------------------------------------------------------------------------------------------------------------
+
+--================================================================================================
+-- PART FOUR: create schedules for the open pledges
+--================================================================================================
+
+drop table if exists GiftCommitmentSchedule_load;
+select	ASLE_External_ID__c			= coalesce(p.pmt_xid+'p',p.inst_xid+'i')
+		,GiftCommitmentId			= c.Id
+		,GiftCommitmentName			= c.Name
+		,StartDate					= isnull(cast(p.inst_date as date),c.EffectiveStartDate)
+		,PaymentMethod				= 'Unknown'
+		,TransactionAmount			= p.inst_amt
+		,TransactionPeriod			= 'Custom'
+		,Type						= 'CreateTransactions'
+		,CreatedDate				= cast(c.CreatedDate as date)
+		,LastModifiedDate			= cast(c.LastModifiedDate as date),
+		p.plg_xid, p.pmt_xid, p.inst_xid
+into	GiftCommitmentSchedule_load
+from	mu_pledge_installment_payments p
+join	sf_giftcommitments c on p.plg_xid=c.ASLE_External_ID_c
+order by p.plg_xid,p.inst_date;
+
+-->> check for dupes
+select	count(*),ASLE_External_ID__c
+from	GiftCommitmentSchedule_load s
+group by ASLE_External_ID__c
+having count(*)>1;
+
+-->> get records for loading
+select	* from GiftCommitmentSchedule_load;
+
+--================================================================================================
+-- PART FIVE: apply payments to the schedules
+--================================================================================================
+drop table if exists GiftTransaction_instpmt_load;
+select	ASLE_External_ID__c				= cast(y.pmt_xid as varchar(10))
+		,GiftCommitmentId				= s.GiftCommitmentId			
+		,GiftCommitmentScheduleId		= s.Id
+		,DonorId						= a.Id
+		,OutreachSourceCodeId			= o.Id
+		,CampaignId						= case when s.Id is null and g.Id is null then d.Id
+											   when s.Id is null then g.Id 
+											   else null end
+		, Name							= s.giftcommitmentname + ' Payment'
+		, GiftType						= case when a.PersonContactId is null then 'Organizational' else 'Individual' end
+		, OriginalAmount				= pmt_amount
+		, Status						= case when pmt_gifttype='w' then 'Written-Off' else 'Unpaid' end
+		, TransactionDate				= pmt_gifteffdat
+		, TransactionDueDate			= s.StartDate
+		, ASLE_Anonymous__c				= case when giftanon='N' then 0 else 1 end
+		, ASLE_Batch__c					= trim(giftbatch)
+		, PaymentMethod					= case when tenderdesc='' then 'Check' else tenderdesc end
+		, ASLE_Gift_Received_Date__c	= pmt_createdate
+		, CreatedDate					= pmt_createdate
+		, LastModifiedDate				= pmt_modifydate
+
+		--> custom fields
+		, ASLE_TransactionClass1__c		= transclass1
+		, ASLE_TransactionClass2__c		= transclass2
+		, ASLE_Check_Number__c			= checkno
+		, ASLE_Source__c				= gift_src
+		, ASLE_Processed_Date__c		= pmt_giftprocdt
+		, ASLE_Comments__c				= comment
+into	GiftTransaction_instpmt_load
+from (	select	plg_xid, pmt_xid, trim(t.table_val) as tenderdesc, pmt_gifttype, 
+				g.giftcamp, g.giftsolic, g.giftanon, trim(g.giftbatch) giftbatch, trim(tc1.table_val) as transclass1,
+				trim(tc2.table_val) as transclass2, trim(src.table_val) as gift_src, trim(g.giftchckno) as checkno,
+				trim(g.giftcomm) as comment,
+				sum(pmt_giftamount+pmt_giftwriteoff) as pmt_amount,
+				min(case when pmt_giftjntkey in (1,0) then pmt_giftid else 'z' end) as pmt_giftid,
+				max(pmt_giftprocdt) as pmt_giftprocdt,
+				max(pmt_gifteffdat) as pmt_gifteffdat,
+				max(pmt_giftcreatedate) as pmt_createdate,
+				max(pmt_giftmodifydate) as pmt_modifydate
+		from	mu_payment_list y
+		left join muhlmillprod..tender t on y.pmt_gifttender=t.table_code
+		left join muhlmillprod..gifts g on y.pmt_xid=g.giftkey
+		left	join MuhlMillProd..transaction_class tc1 on tc1.table_code = g.giftclass1
+		left	join MuhlMillProd..transaction_class2 tc2 on tc2.table_code = g.giftclass2
+		left	join MuhlMillProd..source_types src on src.table_code = g.giftsource
+		group by plg_xid, pmt_xid,pmt_gifttype,trim(t.table_val),g.giftcamp,g.giftsolic, 
+				g.giftanon,trim(g.giftbatch),trim(tc1.table_val),trim(tc2.table_val),trim(src.table_val),trim(g.giftchckno),trim(g.giftcomm)
+	 )y
+join	sf_giftcommitmentschedules s on s.pmt_xid=cast(y.pmt_xid as varchar(10))
+join	sf_accounts a on y.pmt_giftid=a.ASLE_External_ID_c
+left	join sf_solicitations o on y.giftsolic=o.ASLE_External_ID_c COLLATE Latin1_General_BIN
+left	join sf_campaigns g on y.giftcamp =g.ASLE_External_ID_c COLLATE Latin1_General_BIN 
+left	join sf_campaigns d on 'default' =d.ASLE_External_ID_c COLLATE Latin1_General_BIN ;
+
+update GiftTransaction_instpmt_load
+set CreatedDate=LastModifiedDate, LastModifiedDate=CreatedDate
+where CreatedDate>LastModifiedDate;
+
+-->> check for duplicates
+select	count(*),ASLE_External_ID__c
+from	GiftTransaction_instpmt_load
+group by ASLE_External_ID__c
+having count(*)>1;
+
+-->> get records for loading
+select * from GiftTransaction_instpmt_load;
+
+--================================================================================================
+-- PART SIX: apply writeoffs to scheduled pledges
+--================================================================================================
+drop table if exists GiftTransaction_instwo_load;
+select	ASLE_External_ID__c				= cast(y.pmt_xid as varchar(10))
+		,GiftCommitmentId				= s.Id			
+		,DonorId						= a.Id
+		,OutreachSourceCodeId			= o.Id
+		,CampaignId						= case when s.Id is null and g.Id is null then d.Id
+											   when s.Id is null then g.Id 
+											   else null end
+		, Name							= s.name + ' Write Off'
+		, GiftType						= case when a.PersonContactId is null then 'Organizational' else 'Individual' end
+		, OriginalAmount				= pmt_amount
+		, Status						= case when pmt_gifttype='w' then 'Written-Off' else 'Unpaid' end
+		, TransactionDate				= pmt_gifteffdat
+		, TransactionDueDate			= pmt_gifteffdat
+		, ASLE_Anonymous__c				= case when giftanon='N' then 0 else 1 end
+		, ASLE_Batch__c					= trim(giftbatch)
+		, PaymentMethod					= case when tenderdesc='' then 'Check' else tenderdesc end
+		, ASLE_Gift_Received_Date__c	= pmt_createdate
+		, CreatedDate					= pmt_createdate
+		, LastModifiedDate				= pmt_modifydate
+
+		--> custom fields
+		, ASLE_TransactionClass1__c		= transclass1
+		, ASLE_TransactionClass2__c		= transclass2
+		, ASLE_Check_Number__c			= checkno
+		, ASLE_Source__c				= gift_src
+		, ASLE_Processed_Date__c		= pmt_giftprocdt
+		, ASLE_Comments__c				= comment
+into	GiftTransaction_instwo_load
+from (	select	plg_xid, pmt_xid, trim(t.table_val) as tenderdesc, pmt_gifttype, 
+				g.giftcamp, g.giftsolic, g.giftanon, trim(g.giftbatch) giftbatch, trim(tc1.table_val) as transclass1,
+				trim(tc2.table_val) as transclass2, trim(src.table_val) as gift_src, trim(g.giftchckno) as checkno,
+				trim(g.giftcomm) as comment,
+				sum(pmt_giftamount+pmt_giftwriteoff) as pmt_amount,
+				min(case when pmt_giftjntkey in (1,0) then pmt_giftid else 'z' end) as pmt_giftid,
+				max(pmt_giftprocdt) as pmt_giftprocdt,
+				max(pmt_gifteffdat) as pmt_gifteffdat,
+				max(pmt_giftcreatedate) as pmt_createdate,
+				max(pmt_giftmodifydate) as pmt_modifydate
+		from	mu_payment_list y
+		left join muhlmillprod..tender t on y.pmt_gifttender=t.table_code
+		left join muhlmillprod..gifts g on y.pmt_xid=g.giftkey
+		left	join MuhlMillProd..transaction_class tc1 on tc1.table_code = g.giftclass1
+		left	join MuhlMillProd..transaction_class2 tc2 on tc2.table_code = g.giftclass2
+		left	join MuhlMillProd..source_types src on src.table_code = g.giftsource
+		where	exists (select 1 from mu_pledge_list p where y.plg_xid=p.plg_xid group by plg_xid having sum(plg_balance)>0)
+		and		y.pmt_gifttype='w'
+		group by plg_xid, pmt_xid,pmt_gifttype,trim(t.table_val),g.giftcamp,g.giftsolic, 
+				g.giftanon,trim(g.giftbatch),trim(tc1.table_val),trim(tc2.table_val),trim(src.table_val),trim(g.giftchckno),trim(g.giftcomm)
+	 )y
+join	sf_giftcommitments s on s.ASLE_External_ID_c=cast(y.plg_xid as varchar(10))
+join	sf_accounts a on y.pmt_giftid=a.ASLE_External_ID_c
+left	join sf_solicitations o on y.giftsolic=o.ASLE_External_ID_c COLLATE Latin1_General_BIN
+left	join sf_campaigns g on y.giftcamp =g.ASLE_External_ID_c COLLATE Latin1_General_BIN 
+left	join sf_campaigns d on 'default' =d.ASLE_External_ID_c COLLATE Latin1_General_BIN ;
+
+update GiftTransaction_instwo_load
+set CreatedDate=LastModifiedDate, LastModifiedDate=CreatedDate
+where CreatedDate>LastModifiedDate;
+
+-->> check for duplicates
+select	count(*),ASLE_External_ID__c
+from	GiftTransaction_instwo_load
+group by ASLE_External_ID__c
+having count(*)>1;
+
+-->> get records for loading
+select * from GiftTransaction_instwo_load;
+
+
 
 
